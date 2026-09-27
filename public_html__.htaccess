@@ -1,0 +1,25 @@
+Options -Indexes
+RewriteEngine On
+
+# Do not expose application source or sensitive artifacts through the web server.
+RewriteRule ^api/src(?:/|$) - [F,L]
+<FilesMatch "(?i)(^\.env(?:\..*)?$|^composer\.(?:json|lock)$|^phpunit\.xml|\.(?:sql|bak|backup|log|ini|key|pem|crt|p12|pfx|phar|dist)$)">
+  Require all denied
+</FilesMatch>
+
+# Clean workspace aliases. All targets remain protected by the admin owner session.
+RewriteRule ^agents/?$ api/admin/agents.php [L,QSA]
+RewriteRule ^agents/([a-z0-9_-]+)/?$ api/admin/agents.php?slug=$1 [L,QSA]
+RewriteRule ^projects/?$ api/admin/projects.php [L,QSA]
+RewriteRule ^projects/([0-9]+)/?$ api/admin/projects.php?id=$1 [L,QSA]
+RewriteRule ^tasks/?$ api/admin/tasks.php [L,QSA]
+RewriteRule ^tasks/([0-9]+)/?$ api/admin/tasks.php?id=$1 [L,QSA]
+RewriteRule ^customers/?$ api/admin/customers.php [L,QSA]
+RewriteRule ^customers/([0-9]+)/?$ api/admin/customers.php?id=$1 [L,QSA]
+RewriteRule ^qa/?$ api/admin/qa.php [L,QSA]
+RewriteRule ^qa/([0-9]+)/?$ api/admin/qa.php?id=$1 [L,QSA]
+
+# Backward compatible internal admin routes.
+RewriteRule ^api/admin/agents/([a-z0-9_-]+)/?$ api/admin/agents.php?slug=$1 [L,QSA]
+RewriteRule ^api/admin/projects/([0-9]+)/?$ api/admin/projects.php?id=$1 [L,QSA]
+RewriteRule ^api/admin/tasks/([0-9]+)/?$ api/admin/tasks.php?id=$1 [L,QSA]

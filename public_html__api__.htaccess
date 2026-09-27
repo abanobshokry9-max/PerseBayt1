@@ -1,0 +1,3 @@
+Options -Indexes
+RewriteEngine On
+RewriteRule ^meta/webhook/?$ meta/webhook.php [L,QSA]

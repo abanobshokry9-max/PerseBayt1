@@ -1,0 +1,9 @@
+<?php
+declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(403);exit("CLI only\n");}
+$root=dirname(__DIR__,2);$files=[];$it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root,FilesystemIterator::SKIP_DOTS));foreach($it as $f)if($f->isFile()&&strtolower($f->getExtension())==='php')$files[]=$f->getPathname();
+$classes=[];$parents=[];
+foreach($files as $file){$src=(string)file_get_contents($file);if(!preg_match_all('/\b(?:final\s+|abstract\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s+extends\s+([A-Za-z_][A-Za-z0-9_]*))?/',$src,$cm,PREG_SET_ORDER))continue;foreach($cm as $c){$name=$c[1];$parents[$name]=$c[2]??null;if(!isset($classes[$name]))$classes[$name]=[];if(preg_match_all('/\b(?:public|protected|private)?\s*(?:static\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/',$src,$mm))foreach($mm[1] as $m)$classes[$name][$m]=true;}}
+$has=function(string $c,string $m,array $seen=[])use(&$has,&$classes,&$parents):bool{if(isset($seen[$c]))return false;$seen[$c]=true;if(isset($classes[$c][$m]))return true;$p=$parents[$c]??null;return $p?$has($p,$m,$seen):false;};
+$issues=[];foreach($files as $file){$src=(string)file_get_contents($file);if(!preg_match_all('/\b([A-Z][A-Za-z0-9_]*)::([A-Za-z_][A-Za-z0-9_]*)\s*\(/',$src,$mm,PREG_OFFSET_CAPTURE))continue;for($i=0;$i<count($mm[0]);$i++){$c=$mm[1][$i][0];$m=$mm[2][$i][0];if(!isset($classes[$c]))continue;if($has($c,$m))continue;$offset=$mm[0][$i][1];$line=substr_count(substr($src,0,$offset),"\n")+1;$issues[]=str_replace($root.'/','',$file).':'.$line.' '.$c.'::'.$m;}}
+echo 'PerseBayt static class-call check'.PHP_EOL;echo 'PHP files: '.count($files).' | classes: '.count($classes).' | issues: '.count($issues).PHP_EOL;foreach($issues as $x)echo '[FAIL] '.$x.PHP_EOL;echo 'Result: '.($issues?'FAIL':'PASS').PHP_EOL;exit($issues?2:0);

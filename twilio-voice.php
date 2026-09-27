@@ -1,0 +1,10 @@
+<?php
+declare(strict_types=1);
+require_once dirname(__DIR__).'/src/bootstrap.php';
+$base=rtrim((string)config('app.base_url'),' /');$query=(string)($_SERVER['QUERY_STRING']??'');$url=$base.'/webhooks/twilio-voice.php'.($query!==''?'?'.$query:'');
+if(!TwilioClient::verify($url,$_POST,(string)($_SERVER['HTTP_X_TWILIO_SIGNATURE']??''))){http_response_code(401);exit;}
+$from=(string)($_POST['From']??'');$sid=(string)($_POST['CallSid']??'');$to=(string)($_POST['To']??'');$agentSlug=trim((string)($_GET['agent']??''));$vc=(int)($_GET['vc']??0);
+$owner=CommunicationGateway::isOwnerNumber($from)||CommunicationGateway::isOwnerNumber($to);$direction=CommunicationGateway::isOwnerNumber($to)&&!CommunicationGateway::isOwnerNumber($from)?'outbound':'inbound';$agent=null;try{$agent=$agentSlug!==''?AgentService::assertRunnable(AgentService::bySlug($agentSlug)):AgentService::assertRunnable(AgentService::bySlug((string)setting('voice.owner_default_agent','ramy')));}catch(Throwable){$agent=AgentService::bySlug('ramy');}$agentSlug=(string)$agent['slug'];
+$channelId=db()->query("SELECT id FROM communication_channels WHERE channel_key='voice' LIMIT 1")->fetchColumn()?:null;try{db()->prepare("INSERT INTO calls(channel_id,direction,from_ref,to_ref,purpose,provider_call_id,state,raw_json,started_at) VALUES (?,?,?,?,?,?,'connected',?,NOW()) ON DUPLICATE KEY UPDATE state='connected',started_at=COALESCE(started_at,NOW()),raw_json=VALUES(raw_json)")->execute([$channelId,$direction,$from,$to,($owner?'owner-agent:':'customer-agent:').$agentSlug,$sid,j($_POST+['agent_slug'=>$agentSlug,'voice_conversation_id'=>$vc])]);}catch(Throwable){}
+if($vc>0){try{VoiceAgentCenterService::updateCallState($vc,'connected',$sid);}catch(Throwable){}}
+$prompt=$owner?'You are connected to '.(string)$agent['display_name'].'. Please speak your request.':'Welcome. Please speak your request.';$action=$base.'/webhooks/twilio-voice-input.php?agent='.rawurlencode($agentSlug).($vc>0?'&vc='.$vc:'');header('Content-Type: text/xml; charset=UTF-8');echo TwilioClient::gatherXml($prompt,$action);

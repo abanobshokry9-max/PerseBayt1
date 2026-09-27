@@ -1,0 +1,2 @@
+<?php
+declare(strict_types=1);require_once dirname(__DIR__).'/src/bootstrap.php';Auth::requireOwner();$id=(int)($_GET['id']??0);$kind=(string)($_GET['kind']??'output');$path=VoiceAgentCenterService::audioPath($id,$kind);$mime=mime_content_type($path)?:'application/octet-stream';header('Content-Type: '.$mime);header('Content-Length: '.filesize($path));header('Cache-Control: private, no-store');readfile($path);
