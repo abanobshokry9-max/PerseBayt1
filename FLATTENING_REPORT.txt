@@ -1,0 +1,21 @@
+PerseBayt1 flattened GitHub package
+==================================
+
+Original files: 260
+Files in flattened package (including this report): 261
+All directory levels were removed.
+Duplicate basenames were renamed by embedding their former path.
+
+IMPORTANT: This flattened package is NOT expected to run as the website because PHP includes, routes, assets, and security rules depend on the original folder structure. It is suitable for uploading as a flat source/archive only.
+
+Renamed duplicate files:
+- private/.htaccess -> private__.htaccess
+- public_html/.htaccess -> public_html__.htaccess
+- public_html/api/.htaccess -> public_html__api__.htaccess
+- public_html/api/admin/index.php -> public_html__api__admin__index.php
+- public_html/api/admin/notifications-read.php -> public_html__api__admin__notifications-read.php
+- public_html/api/admin/team-chat.php -> public_html__api__admin__team-chat.php
+- public_html/api/index.php -> public_html__api__index.php
+- public_html/api/notifications-read.php -> public_html__api__notifications-read.php
+- public_html/api/team-chat.php -> public_html__api__team-chat.php
+- public_html/index.php -> public_html__index.php
