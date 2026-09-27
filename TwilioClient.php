@@ -1,0 +1,17 @@
+<?php
+declare(strict_types=1);
+final class TwilioClient {
+    private static function sid():string{return (string)config('twilio.account_sid','');}
+    private static function auth():string{return (string)config('twilio.auth_token','');}
+    public static function configured():bool{return str_starts_with(self::sid(),'AC')&&strlen(self::auth())>20;}
+    private static function headers():array{return ['Authorization: Basic '.base64_encode(self::sid().':'.self::auth())];}
+    public static function testAccount():array{if(!self::configured())throw new RuntimeException('twilio_not_configured');$r=HttpClient::json('GET','https://api.twilio.com/2010-04-01/Accounts/'.rawurlencode(self::sid()).'.json',['Authorization'=>'Basic '.base64_encode(self::sid().':'.self::auth())],null,25);if((string)($r['sid']??'')!==self::sid())throw new RuntimeException('twilio_account_mismatch');return ['sid'=>$r['sid'],'status'=>$r['status']??null,'friendly_name'=>$r['friendly_name']??null];}
+    public static function send(string $to,string $body,string $channel='sms'):array{if(!self::configured())throw new RuntimeException('twilio_not_configured');$from=$channel==='whatsapp'?(string)config('twilio.whatsapp_from',''):(string)config('twilio.sms_from','');if($from==='')throw new RuntimeException('twilio_sender_missing');if($channel==='whatsapp'){$from=str_starts_with($from,'whatsapp:')?$from:'whatsapp:'.$from;$to=str_starts_with($to,'whatsapp:')?$to:'whatsapp:'.$to;}$url='https://api.twilio.com/2010-04-01/Accounts/'.rawurlencode(self::sid()).'/Messages.json';return HttpClient::form('POST',$url,self::headers(),['To'=>$to,'From'=>$from,'Body'=>pb_substr($body,0,1500)],35);}
+    public static function call(string $to,string $callbackUrl,?string $statusCallbackUrl=null):array{
+        if(!self::configured())throw new RuntimeException('twilio_not_configured');$from=(string)config('twilio.voice_from','');if($from==='')throw new RuntimeException('twilio_voice_from_missing');
+        $host=(string)parse_url((string)config('app.base_url'),PHP_URL_HOST);Security::publicUrl($callbackUrl,[$host]);$statusCallbackUrl=$statusCallbackUrl?:rtrim((string)config('app.base_url'),' /').'/webhooks/twilio-status.php';Security::publicUrl($statusCallbackUrl,[$host]);
+        $url='https://api.twilio.com/2010-04-01/Accounts/'.rawurlencode(self::sid()).'/Calls.json';return HttpClient::form('POST',$url,self::headers(),['To'=>$to,'From'=>$from,'Url'=>$callbackUrl,'Method'=>'POST','StatusCallback'=>$statusCallbackUrl,'StatusCallbackMethod'=>'POST','StatusCallbackEvent'=>'initiated ringing answered completed'],35);
+    }
+    public static function verify(string $url,array $params,string $signature):bool{$token=self::auth();if($token===''||$signature==='')return false;ksort($params,SORT_STRING);$data=$url;foreach($params as $k=>$v){if(is_array($v)){foreach($v as $vv)$data.=$k.$vv;}else $data.=$k.$v;}$calc=base64_encode(hash_hmac('sha1',$data,$token,true));return hash_equals($calc,$signature);}
+    public static function gatherXml(string $prompt,string $action):string{$prompt=htmlspecialchars(pb_substr($prompt,0,800),ENT_XML1|ENT_QUOTES,'UTF-8');$action=htmlspecialchars($action,ENT_XML1|ENT_QUOTES,'UTF-8');return '<?xml version="1.0" encoding="UTF-8"?><Response><Gather input="speech dtmf" language="ar-EG" speechTimeout="2" action="'.$action.'" method="POST"><Say language="ar-XA" voice="Google.ar-XA-Standard-A">'.$prompt.'</Say></Gather><Redirect method="POST">'.$action.'</Redirect></Response>';}
+}

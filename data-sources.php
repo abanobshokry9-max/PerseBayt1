@@ -1,0 +1,5 @@
+<?php
+declare(strict_types=1);require_once dirname(__DIR__).'/src/bootstrap.php';Auth::requireOwner();$rows=[];try{$rows=db()->query("SELECT * FROM data_source_registry ORDER BY concept_key,FIELD(status,'canonical','migrated','legacy_read_only','archive'),source_key")->fetchAll();}catch(Throwable){}AdminUi::header('Data Sources of Truth','data_sources');echo AdminUi::flash();
+?>
+<section class="card"><div class="card-title"><div><h2>Canonical and legacy data sources</h2><span class="muted small">Historical tables are preserved, but each business concept must have one declared source of truth.</span></div></div><div class="table-wrap"><table><thead><tr><th>Concept</th><th>Source</th><th>Status</th><th>Replacement</th><th>Notes</th></tr></thead><tbody><?php foreach($rows as $r):?><tr><td><?=e($r['concept_key'])?></td><td><code><?=e($r['source_key'])?></code></td><td><?=AdminUi::badge($r['status'])?></td><td><?=e($r['replacement_source_key']?:'-')?></td><td><?=e($r['notes']??'')?></td></tr><?php endforeach?></tbody></table></div></section>
+<?php AdminUi::footer();

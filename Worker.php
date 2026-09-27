@@ -1,0 +1,72 @@
+<?php
+declare(strict_types=1);
+final class Worker {
+    public static function run(int $limit=8):array{$done=[];self::heartbeat();try{Scheduler::tick();}catch(Throwable $e){error_log('ELMETR scheduler tick isolated: '.Security::redactSecrets($e->getMessage(),220));}try{for($i=0;$i<max(1,min(30,$limit));$i++){self::heartbeat();$job=self::claim();if(!$job)break;$done[]=self::execute($job);}self::heartbeat();try{put_setting('runtime.worker_last_run_state','ok');put_setting('runtime.worker_last_run_error','');put_setting('runtime.worker_last_run_at',now_utc());}catch(Throwable){}return $done;}catch(Throwable $e){try{put_setting('runtime.worker_last_run_state','failed');put_setting('runtime.worker_last_run_error',pb_substr(Security::redactSecrets($e->getMessage(),220),0,220));put_setting('runtime.worker_last_run_at',now_utc());}catch(Throwable){}throw $e;}}
+    private static function logHeartbeat(?int $jobId=null):void{try{$bucket=gmdate('Y-m-d H:i:00');db()->prepare('INSERT INTO worker_heartbeat_log(heartbeat_minute,hit_count,last_job_id,last_seen_at) VALUES (?,1,?,NOW()) ON DUPLICATE KEY UPDATE hit_count=hit_count+1,last_job_id=VALUES(last_job_id),last_seen_at=NOW()')->execute([$bucket,$jobId?:null]);}catch(Throwable){}}
+    public static function heartbeat(?int $jobId=null):void{try{put_setting('runtime.worker_heartbeat_at',now_utc());self::logHeartbeat($jobId);if($jobId)db()->prepare("UPDATE jobs SET locked_at=NOW(),lease_expires_at=DATE_ADD(NOW(),INTERVAL 5 MINUTE) WHERE id=? AND state='running'")->execute([$jobId]);}catch(Throwable){}}
+    public static function heartbeatTask(int $taskId):void{if($taskId<=0)return;try{put_setting('runtime.worker_heartbeat_at',now_utc());self::logHeartbeat();db()->prepare("UPDATE jobs SET locked_at=NOW(),lease_expires_at=DATE_ADD(NOW(),INTERVAL 5 MINUTE) WHERE task_id=? AND state='running'")->execute([$taskId]);}catch(Throwable){}}
+    private static function retryPlan(string $error,int $attempt,int $maxAttempts):array{
+        if($attempt>=$maxAttempts)return ['retry'=>false,'delay'=>0,'reason'=>'attempts_exhausted'];
+        $low=pb_strtolower($error);
+        $permanent=[
+            'permission_denied','agent_tool_disabled','not_configured','http_401','http_403','http_404','http_422',
+            'model does not exist','unexpected model name format','invalid schema','database_schema_incomplete','project_context_missing',
+        ];
+        if(str_starts_with($low,'database_connection_lost:')||str_contains($low,'mysql server has gone away')||str_contains($low,'error: 2006')||str_contains($low,'error: 2013'))return ['retry'=>true,'delay'=>5,'reason'=>'database_reconnect'];
+        if(str_starts_with($low,'ai_routes_exhausted:')){
+            // Gateway already tried Primary + Fallback routes. Provider/model format failures will not heal by waiting 3/6 minutes.
+            if(str_contains($low,'http_400')||str_contains($low,'http_404')||str_contains($low,'ai_invalid_json')||str_contains($low,'unexpected model name format'))
+                return ['retry'=>false,'delay'=>0,'reason'=>'permanent_ai_route_error'];
+        }
+        foreach($permanent as $p)if(str_contains($low,$p))return ['retry'=>false,'delay'=>0,'reason'=>'permanent_error'];
+        // Transient failures retry quickly; the old 3/6 minute backoff made the queue look frozen.
+        $delay=$attempt<=1?20:60;
+        if(str_contains($low,'http_429'))$delay=$attempt<=1?45:90;
+        if(str_contains($low,'walid_zero_results'))$delay=$attempt<=1?30:60;
+        return ['retry'=>true,'delay'=>$delay,'reason'=>'transient'];
+    }
+    private static function claim():?array{$pdo=db();$pdo->beginTransaction();try{$pdo->exec("UPDATE jobs SET state='queued',locked_at=NULL,lease_token=NULL,lease_expires_at=NULL,error_code='worker_lease_expired' WHERE state='running' AND lease_expires_at IS NOT NULL AND lease_expires_at<NOW() AND attempts<max_attempts");$q=$pdo->query("SELECT j.* FROM jobs j LEFT JOIN agents a ON a.id=j.agent_id WHERE j.state='queued' AND j.available_at<=NOW() AND j.attempts<j.max_attempts AND (j.agent_id IS NULL OR (a.is_active=1 AND a.status<>'disabled')) ORDER BY (j.agent_id IS NOT NULL AND j.task_id=a.current_task_id) DESC,j.priority DESC,j.id ASC LIMIT 1 FOR UPDATE");$j=$q->fetch();if(!$j){$pdo->commit();return null;}$lease=bin2hex(random_bytes(16));$pdo->prepare("UPDATE jobs SET state='running',locked_at=NOW(),lease_token=?,lease_expires_at=DATE_ADD(NOW(),INTERVAL 5 MINUTE),started_at=NOW(),finished_at=NULL,duration_ms=NULL,error_code=NULL,next_retry_at=NULL,attempts=attempts+1 WHERE id=?")->execute([$lease,$j['id']]);$pdo->commit();$j['attempts']=(int)$j['attempts']+1;$j['lease_token']=$lease;return $j;}catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}}
+    private static function execute(array $job):array{
+        $id=(int)$job['id'];
+        try{
+            $actor=['type'=>'system','id'=>'worker'];if(!empty($job['agent_id'])){AgentService::assertRunnable((int)$job['agent_id']);$actor=['type'=>'agent','id'=>(string)$job['agent_id']];}Audit::setActor($actor['type'],$actor['id']);
+            $r=match($job['kind']){'walid_opportunity_search'=>OpportunitySearchService::runTask((int)$job['task_id']),'walid_company_prospecting'=>ProspectingService::runTask((int)$job['task_id']),'video_scene_generate'=>VideoStudioService::runSceneJob($job),'video_audio_generate'=>VideoStudioService::runAudioJob($job),'video_render'=>VideoStudioService::runRenderJob($job),'social_playbook'=>SocialPlaybookService::runJob($job),'hosting_inventory'=>self::hostingInventory($job,false),'walid_scan'=>self::hostingInventory($job,true),'ayman_execute'=>AymanRunner::run((int)$job['task_id'],false),'emad_recovery_execute'=>AymanRunner::run((int)$job['task_id'],true),'emad_review'=>EmadRunner::run((int)$job['task_id']),'emad_security_review'=>SecurityReviewRunner::run((int)$job['task_id']),'ramy_followup'=>self::followup($job),'agent_task'=>GenericAgentRunner::run((int)$job['task_id']),'social_publish'=>SocialPublisher::runJob($job),default=>throw new RuntimeException('unknown_job_kind')};
+            if($job['task_id']){try{$finalTask=TaskService::get((int)$job['task_id']);if($finalTask['status']==='cancelled'){db()->prepare("UPDATE jobs SET state='cancelled',result_json=?,error_code='task_cancelled',locked_at=NULL,lease_token=NULL,lease_expires_at=NULL,finished_at=NOW(),duration_ms=TIMESTAMPDIFF(MICROSECOND,started_at,NOW()) DIV 1000 WHERE id=?")->execute([j($r),$id]);return ['job'=>$id,'ok'=>false,'kind'=>$job['kind'],'cancelled'=>true,'result'=>$r];}}catch(Throwable){}}
+            db()->prepare("UPDATE jobs SET state='done',result_json=?,error_code=NULL,locked_at=NULL,lease_token=NULL,lease_expires_at=NULL,finished_at=NOW(),duration_ms=TIMESTAMPDIFF(MICROSECOND,started_at,NOW()) DIV 1000 WHERE id=?")->execute([j($r),$id]);return ['job'=>$id,'ok'=>true,'kind'=>$job['kind'],'result'=>$r];
+        }catch(Throwable $e){
+            $error=Security::redactSecrets($e->getMessage());if(in_array($error,['task_cancelled','task_not_active'],true)){db()->prepare("UPDATE jobs SET state='cancelled',locked_at=NULL,lease_token=NULL,lease_expires_at=NULL,error_code=?,finished_at=NOW(),duration_ms=TIMESTAMPDIFF(MICROSECOND,started_at,NOW()) DIV 1000 WHERE id=?")->execute([$error,$id]);if($job['task_id']){try{$tid=(int)$job['task_id'];$cur=TaskService::get($tid);if(!in_array($cur['status'],['completed','cancelled','failed'],true)){db()->prepare("UPDATE tasks SET status='cancelled',completed_at=NOW() WHERE id=?")->execute([$tid]);TaskService::event($tid,'system','worker','cancelled_during_run',$cur['status'],'cancelled',['reason'=>$error]);}}catch(Throwable){}}return ['job'=>$id,'ok'=>false,'kind'=>$job['kind'],'cancelled'=>true,'error'=>$error];}
+            if(str_starts_with($error,'agent_recovery_required:')){db()->prepare("UPDATE jobs SET state='failed',locked_at=NULL,lease_token=NULL,lease_expires_at=NULL,error_code=?,finished_at=NOW(),duration_ms=TIMESTAMPDIFF(MICROSECOND,started_at,NOW()) DIV 1000 WHERE id=?")->execute([pb_substr($error,0,120),$id]);if($job['task_id']){try{$tid=(int)$job['task_id'];$t=TaskService::get($tid);if(!in_array($t['status'],['completed','cancelled','failed'],true)){db()->prepare("UPDATE tasks SET status='blocked',review_status='blocked' WHERE id=?")->execute([$tid]);TaskService::event($tid,'system','worker','recovery_required',$t['status'],'blocked',['reason'=>pb_substr($error,0,500)]);if($t['assigned_agent_id'])AgentService::runtimeStatus((int)$t['assigned_agent_id'],'error',null,'agent_recovery_required');Notifications::add('critical','tasks','المهمة محتاجة استرجاع قبل الاستكمال','تم منع إعادة المحاولة التلقائية لأن جزءًا من التنفيذ لم يرجع لحالة نظيفة. راجع النسخة الاحتياطية وسجل التنفيذ قبل تشغيل المهمة تاني.','task',(string)$tid);}}catch(Throwable){}}return ['job'=>$id,'ok'=>false,'kind'=>$job['kind'],'recovery_required'=>true,'error'=>$error];}
+            $paused=$error==='agent_disabled'||str_starts_with($error,'agent_tool_disabled:');
+            if($paused){
+                db()->prepare("UPDATE jobs SET state='waiting',error_code=?,locked_at=NULL,lease_token=NULL,lease_expires_at=NULL,attempts=GREATEST(attempts-1,0) WHERE id=?")->execute([pb_substr($error,0,120),$id]);
+                if($job['task_id']){try{$taskId=(int)$job['task_id'];$t=TaskService::get($taskId);db()->prepare("UPDATE tasks SET status='waiting' WHERE id=? AND status NOT IN ('completed','cancelled','failed')")->execute([$taskId]);TaskService::event($taskId,'system','worker','agent_capability_wait',$t['status'],'waiting',['reason'=>$error]);if($t['assigned_agent_id'])AgentService::runtimeStatus((int)$t['assigned_agent_id'],'idle');}catch(Throwable){}}
+                return ['job'=>$id,'ok'=>false,'kind'=>$job['kind'],'paused'=>true,'error'=>$error];
+            }
+            $plan=self::retryPlan($error,(int)$job['attempts'],(int)$job['max_attempts']);$retry=(bool)$plan['retry'];$delay=(int)$plan['delay'];
+            db()->prepare("UPDATE jobs SET state=?,error_code=?,locked_at=NULL,lease_token=NULL,lease_expires_at=NULL,available_at=IF(?='queued',DATE_ADD(NOW(),INTERVAL ? SECOND),NOW()),next_retry_at=IF(?='queued',DATE_ADD(NOW(),INTERVAL ? SECOND),NULL),finished_at=IF(?='failed',NOW(),finished_at),duration_ms=IF(?='failed',TIMESTAMPDIFF(MICROSECOND,started_at,NOW()) DIV 1000,duration_ms) WHERE id=?")->execute([$retry?'queued':'failed',pb_substr($error,0,120),$retry?'queued':'failed',$delay,$retry?'queued':'failed',$delay,$retry?'queued':'failed',$retry?'queued':'failed',$id]);
+            if(in_array(($job['kind']??''),['walid_scan','hosting_inventory'],true)&&$job['task_id'])self::markScanFailure((int)$job['task_id'],$error,$retry);
+            if($job['task_id']){$taskId=(int)$job['task_id'];if($retry){try{$t=TaskService::get($taskId);db()->prepare("UPDATE tasks SET status='waiting' WHERE id=? AND status='working'")->execute([$taskId]);TaskService::event($taskId,'system','worker','retry_scheduled',$t['status'],'waiting',['error'=>pb_substr($error,0,220),'attempt'=>(int)$job['attempts'],'max_attempts'=>(int)$job['max_attempts'],'retry_after_seconds'=>$delay,'retry_reason'=>$plan['reason']]);WorkerWakeup::schedule();}catch(Throwable){}}else TaskService::fail($taskId,$error,$plan['reason']==='permanent_ai_route_error'?'فشل إعداد/صيغة مسارات الذكاء؛ أوقفت الانتظار الطويل لأن إعادة نفس الطلب لن تصلح الموديل تلقائيًا.':'فشل التنفيذ بعد المحاولات المسموح بها أو بسبب خطأ دائم.');}
+            return ['job'=>$id,'ok'=>false,'kind'=>$job['kind'],'error'=>$error,'retry'=>$retry,'retry_after_seconds'=>$delay,'retry_reason'=>$plan['reason']];
+        }
+    }
+
+    private static function hostingInventory(array $job,bool $legacy=false):array{
+        $task=TaskService::start((int)$job['task_id']);
+        $ramy=AgentService::assertRunnable(AgentService::bySlug('ramy'));
+        AgentService::requireTool((int)$ramy['id'],'hostinger');
+        AgentService::requireTool((int)$ramy['id'],'projects');
+        foreach(['hosting.read','files.read','database.metadata','domains.read','projects.discover','projects.update'] as $perm)Permissions::requireAgent((int)$ramy['id'],$perm);
+        $ctx=json_decode((string)($task['context_json']??'{}'),true)?:[];$scan=(int)($ctx['scan_id']??0);
+        if(!$scan){db()->prepare("INSERT INTO project_scans(agent_id,state,summary_json) VALUES (?,'queued',?)")->execute([(int)$ramy['id'],j(['reason'=>$legacy?'ترحيل فحص قديم إلى فهرسة الاستضافة':'فهرسة الاستضافة'])]);$scan=(int)db()->lastInsertId();}
+        TaskService::assertContinuable((int)$job['task_id']);self::heartbeat((int)$job['id']);
+        $r=HostingerClient::scanProjects($scan,(int)$ramy['id'],static function()use($job){self::heartbeat((int)$job['id']);TaskService::assertContinuable((int)$job['task_id']);});
+        self::heartbeat((int)$job['id']);TaskService::assertContinuable((int)$job['task_id']);
+        TaskEvidence::add((int)$job['task_id'],'hosting_inventory','دليل فهرسة Hostinger',['scan_id'=>$scan]+$r,'verified',(int)$ramy['id']);
+        if(!empty($r['warning_count'])&&AgentService::tool((int)$ramy['id'],'memory'))AgentLearningService::propose((int)$ramy['id'],'technical_pattern','في فهرسة Hostinger #'.$scan.' ظهرت '.(int)$r['warning_count'].' تحذيرات؛ يجب مراجعتها قبل اعتبار خريطة الاستضافة مكتملة.',null,(int)$job['task_id'],70);
+        TaskService::complete((int)$job['task_id'],['scan_id'=>$scan,'result'=>$r],'اكتملت فهرسة الاستضافة وتحديث السجل التقني دون حذف السجل التاريخي.');
+        Notifications::add(!empty($r['warning_count'])?'warning':'success','hosting','اكتملت فهرسة الاستضافة','تم تحديث خريطة المواقع والدومينات وقواعد البيانات المتاحة.','project_scan',(string)$scan);
+        return $r;
+    }
+    private static function markScanFailure(int $taskId,string $error,bool $retry):void{try{$t=TaskService::get($taskId);$ctx=json_decode((string)($t['context_json']??'{}'),true)?:[];$scan=(int)($ctx['scan_id']??0);if($scan)db()->prepare("UPDATE project_scans SET state=?,summary_json=?,completed_at=IF(?,NULL,NOW()) WHERE id=?")->execute([$retry?'queued':'failed',j(['error'=>pb_substr($error,0,300),'retry'=>$retry]),$retry?1:0,$scan]);}catch(Throwable){}}
+    private static function followup(array $job):array{if($job['task_id']){TaskService::start((int)$job['task_id']);TaskService::complete((int)$job['task_id'],[],'اكتملت متابعة رامي.');}return ['followup'=>true];}
+}

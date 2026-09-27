@@ -1,0 +1,2 @@
+<?php
+declare(strict_types=1);require_once dirname(__DIR__).'/src/bootstrap.php';Auth::requireOwner();header('Content-Type: application/json; charset=utf-8');if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'){http_response_code(405);echo j(['ok'=>false]);exit;}try{Auth::verifyCsrf();$id=(int)($_POST['id']??0);$secret=ServiceAccountService::revealForOwner($id);echo j(['ok'=>true,'secret'=>$secret]);}catch(Throwable $e){http_response_code(400);echo j(['ok'=>false,'error'=>AdminUi::humanError(Security::redactSecrets($e->getMessage(),180))]);}

@@ -1,0 +1,61 @@
+<?php
+declare(strict_types=1);
+/** إصدار 20.2.0: تعريب الواجهة، عقل المبادرة، تنسيق شات الفريق، تعافي واتساب، واستجابة أسرع. مخطط القاعدة يبقى 20.0 لأن الترقية تشغيلية وإضافية. */
+final class ReleaseInfo {
+    public const VERSION='20.2.0-arabic-brain-team';
+    public const SCHEMA='20.0';
+    public const BUILD='2026-09-27';
+    public static function label():string{return 'PerseBayt Company OS '.self::VERSION;}
+    public static function features():array{return [
+        'unified_policy_engine','policy_rules_and_decision_ledger','financial_and_count_budgets','rich_agent_initiatives','risk_gated_autonomy','goal_contributions','layered_semantic_memory',
+        'dynamic_agent_builder','capability_source_tracking','role_templates','universal_resource_registry','physical_schema_approval','schema_catalog',
+        'normalized_workflow_runtime','workflow_wait_resume','workflow_failure_policy','workflow_step_risk_policy','provider_capability_router','provider_health_sync','openrouter_primary_openai_fallback',
+        'image_generation_routing','video_generation_routing','browser_routing','vision_embeddings_realtime_voice','dashboard_voice_center','selected_agent_call_routing',
+        'walid_closed_loop_learning','prospect_prototype_pipeline','basant_reply_state_machine','creator_intelligence','mona_async_scene_pipeline','samir_verified_playbooks','authorized_security_lab',
+        'canonical_prompts','prompt_version_history','data_source_registry','resume_safe_migrations','migration_preflight_backup','runtime_validation','encrypted_vault_snapshot','encrypted_config_snapshot','retention_archive','evidence_and_audit',
+        'owner_package_selfcheck_mode','post_install_acceptance','integration_health_center','deployment_fingerprint','openrouter_key_rotation_diagnostics','daily_free_model_scout','free_provider_pool','quota_aware_provider_fallback','full_arabic_admin_ui','executive_brain_cycle','agent_team_coordinator','whatsapp_context_recovery','fast_response_mode','live_technical_workflow'
+    ];}
+    public static function packageReady():bool{
+        $root=PB_ROOT;$files=[
+            '/public_html/api/src/AgentPolicyEngine.php','/public_html/api/src/AgentUsageBudgetService.php','/public_html/api/src/AgentInitiativeService.php','/public_html/api/src/CoreAgentInitiativeService.php','/public_html/api/src/CreatorIntelligenceService.php',
+            '/public_html/api/src/AgentResourceService.php','/public_html/api/src/PhysicalSchemaService.php','/public_html/api/src/AgentWorkflowService.php','/public_html/api/src/VoiceAgentCenterService.php','/public_html/api/src/ProviderCapabilityRouter.php','/public_html/api/src/AiCapabilityRouter.php','/public_html/api/src/AgentBuilderService.php',
+            '/public_html/api/src/MigrationRunner.php','/public_html/api/src/MigrationRunnerService.php','/public_html/api/src/MigrationPreflightService.php','/public_html/api/src/SchemaPreflightService.php','/public_html/api/src/PromptCanonicalizerService.php','/public_html/api/src/VaultSnapshotService.php','/public_html/api/src/ConfigSnapshotService.php',
+            '/public_html/api/admin/agent-builder.php','/public_html/api/admin/initiatives.php','/public_html/api/admin/creator-intelligence.php','/public_html/api/admin/resources.php','/public_html/api/admin/workflow-builder.php','/public_html/api/admin/voice.php','/public_html/api/admin/provider-center.php','/public_html/api/admin/data-sources.php','/public_html/api/admin/migration.php',
+            '/public_html/api/src/PostInstallAcceptanceService.php','/public_html/api/src/IntegrationHealthService.php','/public_html/api/src/DeploymentFingerprintService.php',
+            '/public_html/api/admin/post-install-acceptance.php','/public_html/api/admin/integration-health.php','/public_html/api/admin/deployment-status.php',
+            '/public_html/api/src/FreeModelScoutService.php','/public_html/api/admin/free-model-scout.php',
+            '/public_html/api/src/AgentTeamCoordinator.php','/public_html/api/src/AgentExecutiveBrainService.php','/public_html/api/admin/technology.php',
+            '/private/bin/migrate-20.php','/private/bin/migrate-20-2.php','/private/bin/package-selfcheck.php','/private/bin/post-install-verify-201.php'
+        ];foreach($files as $f)if(!is_file($root.$f))return false;return true;
+    }
+    private static function schemaReady():bool{try{return SchemaPreflightService::verify()['ok']===true;}catch(Throwable){return false;}}
+    public static function activate():void{
+        if(!self::packageReady()||!self::schemaReady())return;
+        try{
+            $previous=(string)setting('system.version','');
+            put_setting('system.version',self::VERSION);put_setting('system.schema',self::SCHEMA);put_setting('companyos.version',self::VERSION);put_setting('companyos.schema_version',self::SCHEMA);
+            put_setting('runtime.php.minimum','8.1');put_setting('staging.domain','nourmakkah.com');put_setting('security.lab_root_domain','nourmakkah.com');
+            put_setting('policy.owner_approval_high_risk','1');put_setting('policy.external_action_requires_gateway','1');put_setting('memory.canonical_source','agent_memory_bank');put_setting('migration.runner.required','1');put_setting('release.require_runtime_validation','1');put_setting('release.20.1.maintenance','1');put_setting('release.20.1.1.hotfix','1');put_setting('release.20.1.2.db_reconnect_hotfix','1');put_setting('release.20.1.3.account_routing_hotfix','1');put_setting('release.20.1.4.runtime_closure','1');put_setting('release.20.1.5.openrouter_key_rotation','1');put_setting('release.20.1.6.free_model_scout','1');put_setting('free_model_scout.enabled','1');put_setting('free_model_scout.interval_hours','24');put_setting('free_model_scout.route_pool_enabled','1');put_setting('free_model_scout.max_models_per_provider','2');put_setting('free_model_scout.web_discovery_enabled','1');put_setting('package.selfcheck.mode','auto');put_setting('post_install.acceptance.enabled','1');put_setting('integration.health.center.enabled','1');
+            put_setting('voice.center.enabled','1');put_setting('agents.usage_count_budget_enabled','1');put_setting('agents.rich_initiatives_enabled','1');put_setting('agents.workflow_runtime_enabled','1');put_setting('agents.dynamic_resources_enabled','1');put_setting('agents.custom_schema_enabled','1');
+            put_setting('ai.capability_runtime_router_enabled','1');put_setting('ai.provider_health_sync_enabled','1');put_setting('ai.image_routing_enabled','1');put_setting('ai.video_routing_enabled','1');put_setting('ai.browser_routing_enabled','1');put_setting('agency.creator_intelligence_enabled','1');
+            put_setting('agency.community_manager_scope','general_only');put_setting('agency.basant_scope','elfares_only');put_setting('ramy.executive_cycles_enabled','1');put_setting('ramy.executive_cycle_minutes','10');put_setting('ramy.daily_brief_enabled','1');
+            put_setting('release.20.2.0.arabic_brain_team','1');put_setting('ui.language','ar');put_setting('ui.force_arabic_labels','1');put_setting('agents.autonomy_enabled','1');put_setting('agents.team_coordinator_enabled','1');put_setting('agents.executive_brain_enabled','1');put_setting('context.history_limit','28');put_setting('whatsapp.auto_resume_pending','1');put_setting('whatsapp.auto_recovery_interval_minutes','2');put_setting('runtime.fast_response_mode','1');
+            try{AgentCapabilityService::synchronizeSources();}catch(Throwable $e){error_log('PerseBayt capability source sync 20: '.Security::redactSecrets($e->getMessage(),180));}
+            try{PromptCanonicalizerService::applyAll();}catch(Throwable $e){error_log('PerseBayt prompt canonicalizer 20: '.Security::redactSecrets($e->getMessage(),180));}
+            try{ProviderCapabilityRouter::syncFromProviders();}catch(Throwable $e){error_log('PerseBayt provider route sync 20: '.Security::redactSecrets($e->getMessage(),180));}
+            try{SchemaPreflightService::markVerified();}catch(Throwable $e){error_log('PerseBayt schema verify 20: '.Security::redactSecrets($e->getMessage(),180));}
+            try{RamiAuthorityService::sync(false);}catch(Throwable $e){error_log('PerseBayt rami sync 20: '.Security::redactSecrets($e->getMessage(),180));}
+            try{SocialAccountWorkflowService::ensureBuiltins();}catch(Throwable $e){error_log('PerseBayt account playbook seed 20.1.4: '.Security::redactSecrets($e->getMessage(),180));}
+            try{db()->prepare("INSERT INTO schema_migrations(migration_id,version,checksum_sha256,state,details_json,applied_at,verified_at) VALUES ('companyos_20_1_maintenance','20.1',NULL,'verified',?,NOW(),NOW()) ON DUPLICATE KEY UPDATE state='verified',details_json=VALUES(details_json),verified_at=NOW()")->execute([j(['base'=>'20.0','schema'=>'20.0','type'=>'maintenance','destructive'=>false,'recovered_by'=>'20.1.4-runtime-closure'])]);}catch(Throwable $e){error_log('PerseBayt maintenance marker repair: '.Security::redactSecrets($e->getMessage(),180));}
+            try{db()->prepare("INSERT INTO schema_migrations(migration_id,version,checksum_sha256,state,details_json,applied_at,verified_at) VALUES ('companyos_20_1_5_openrouter_key_rotation','20.1.5',NULL,'verified',?,NOW(),NOW()) ON DUPLICATE KEY UPDATE state='verified',details_json=VALUES(details_json),verified_at=NOW()")->execute([j(['base'=>'20.0','schema'=>'20.0','type'=>'runtime_hotfix','destructive'=>false,'scope'=>'openrouter_key_rotation'])]);}catch(Throwable $e){error_log('PerseBayt 20.1.5 marker: '.Security::redactSecrets($e->getMessage(),180));}
+            try{db()->prepare("INSERT INTO schema_migrations(migration_id,version,checksum_sha256,state,details_json,applied_at,verified_at) VALUES ('companyos_20_1_6_free_model_scout','20.1.6',NULL,'verified',?,NOW(),NOW()) ON DUPLICATE KEY UPDATE state='verified',details_json=VALUES(details_json),verified_at=NOW()")->execute([j(['base'=>'20.1.5','schema'=>'20.0','type'=>'additive_extension','destructive'=>false,'scope'=>'daily_free_model_scout'])]);}catch(Throwable $e){error_log('PerseBayt 20.1.6 marker: '.Security::redactSecrets($e->getMessage(),180));}
+            try{db()->exec("UPDATE agent_autonomy SET brain_enabled=1,initiative_enabled=1,followup_enabled=1,cadence_minutes=LEAST(GREATEST(cadence_minutes,2),10),max_initiatives_per_day=GREATEST(max_initiatives_per_day,12),next_run_at=COALESCE(next_run_at,NOW()) WHERE agent_id IN (SELECT id FROM agents WHERE is_active=1)");}catch(Throwable $e){error_log('PerseBayt 20.2 autonomy activation: '.Security::redactSecrets($e->getMessage(),180));}
+            try{db()->exec("UPDATE agent_relationships SET can_message=1,can_start=1 WHERE from_agent_id<>to_agent_id");}catch(Throwable $e){error_log('PerseBayt 20.2 team relationships: '.Security::redactSecrets($e->getMessage(),180));}
+            try{db()->prepare("INSERT INTO schema_migrations(migration_id,version,checksum_sha256,state,details_json,applied_at,verified_at) VALUES ('companyos_20_2_0_arabic_brain_team','20.2.0',NULL,'verified',?,NOW(),NOW()) ON DUPLICATE KEY UPDATE state='verified',details_json=VALUES(details_json),verified_at=NOW()")->execute([j(['base'=>'20.1.6','schema'=>'20.0','type'=>'runtime_extension','destructive'=>false,'scope'=>'arabic_ui_executive_brain_team_chat_whatsapp_speed'])]);}catch(Throwable $e){error_log('PerseBayt 20.2 marker: '.Security::redactSecrets($e->getMessage(),180));}
+            db()->prepare("INSERT INTO release_history(version,schema_version,build_date,source_checksum,notes) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE schema_version=VALUES(schema_version),build_date=VALUES(build_date),notes=VALUES(notes)")
+                ->execute([self::VERSION,self::SCHEMA,self::BUILD,null,'إصدار 20.2.0: تعريب واجهة الإدارة، عقل مبادرة تنفيذي، تنسيق فعلي بين الوكلاء في شات الفريق، تعافي أفضل لواتساب وسياق العملاء، استجابة أسرع، وصفحة مسار تقني حية؛ بدون تغيير هدّام في مخطط قاعدة البيانات.']);
+            put_setting('release.20.final_unified','1');put_setting('release.20.1.maintenance','1');
+            if($previous!==self::VERSION)put_setting('release.20.previous_version',$previous);
+        }catch(Throwable $e){error_log('PerseBayt release 20 activate: '.Security::redactSecrets($e->getMessage(),220));}
+    }
+}
